@@ -1,6 +1,6 @@
 use nom::{
     branch::alt,
-    character::complete::{char, multispace0, one_of},
+    character::complete::{char, multispace0, one_of, space1},
     combinator::{opt, recognize},
     error::ParseError,
     multi::{many0, many1},
@@ -40,4 +40,10 @@ pub fn float(input: &str) -> IResult<&str, &str> {
 
 fn decimal(input: &str) -> IResult<&str, &str> {
     recognize(many1(terminated(one_of("0123456789"), many0(char('_')))))(input)
+}
+
+pub fn space2(input: &str) -> IResult<&str, ()> {
+    char(' ')(input)?;
+    space1(input)?;
+    Ok((input, ()))
 }

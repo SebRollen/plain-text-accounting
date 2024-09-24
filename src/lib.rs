@@ -10,7 +10,7 @@ use nom::{
 };
 use rust_decimal::Decimal;
 use std::str::FromStr;
-use util::{float, ws};
+use util::{float, space2, ws};
 
 mod util;
 
@@ -62,7 +62,7 @@ pub struct Posting<'a> {
 
 fn posting(input: &str) -> IResult<&str, Posting> {
     let (input, account) = map(take_until(" "), |name| Account { name })(input)?;
-    let (input, _) = space1(input)?;
+    let (input, _) = space2(input)?;
     let (input, amount) = opt(amount)(input)?;
     Ok((input, Posting { account, amount }))
 }
@@ -102,20 +102,20 @@ pub fn description(input: &str) -> IResult<&str, (Option<&str>, &str)> {
     Ok((input, (merchant, memo)))
 }
 
-pub fn auxillary_date(input: &str) -> IResult<&str, Option<NaiveDate>> {
-    opt(preceded(tag("="), date))(input)
+pub fn auxillary_date(input: &str) -> IResult<&str, NaiveDate> {
+    preceded(tag("="), date)(input)
 }
 
-pub fn code(input: &str) -> IResult<&str, Option<&str>> {
-    opt(delimited(tag("("), take_until(")"), tag(")")))(input)
+pub fn code(input: &str) -> IResult<&str, &str> {
+    delimited(tag("("), take_until(")"), tag(")"))(input)
 }
 
 pub fn transaction(input: &str) -> IResult<&str, Transaction> {
-    let (input, date) = ws(date)(input)?;
-    let (input, auxillary_date) = ws(auxillary_date)(input)?;
-    let (input, state) = ws(transaction_state)(input)?;
-    let (input, code) = ws(code)(input)?;
-    let (input, (merchant, memo)) = ws(description)(input)?;
+    let (input, date) = date(input)?;
+    let (input, auxillary_date) = alt(char(' '), opt(auxillary_date))(input)?;
+    let (input, state) = transaction_state(input)?;
+    let (input, code) = opt(code)(input)?;
+    let (input, (merchant, memo)) = description(input)?;
     let (input, postings) = separated_list0(line_ending, posting)(input)?;
     Ok((
         input,
