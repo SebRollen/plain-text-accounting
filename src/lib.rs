@@ -2,7 +2,9 @@ use chrono::NaiveDate;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
-    character::complete::{alpha1, char, digit1, line_ending, not_line_ending, space0, space1},
+    character::complete::{
+        alpha1, char, digit1, line_ending, newline, not_line_ending, space0, tab,
+    },
     combinator::{map, map_res, opt, value},
     multi::separated_list0,
     sequence::{delimited, preceded, separated_pair, tuple},
@@ -10,15 +12,15 @@ use nom::{
 };
 use rust_decimal::Decimal;
 use std::str::FromStr;
-use util::{float, space2, ws};
+use util::{float, space2};
 
 mod util;
-
 #[derive(Debug, Clone, PartialEq)]
+
 pub enum TransactionState {
     Cleared,
-    Pending,
     Uncleared,
+    Pending,
 }
 
 pub fn transaction_state(input: &str) -> IResult<&str, TransactionState> {
@@ -61,7 +63,7 @@ pub struct Posting<'a> {
 }
 
 fn posting(input: &str) -> IResult<&str, Posting> {
-    let (input, account) = map(take_until(" "), |name| Account { name })(input)?;
+    let (input, account) = map(take_until("  "), |name| Account { name })(input)?;
     let (input, _) = space2(input)?;
     let (input, amount) = opt(amount)(input)?;
     Ok((input, Posting { account, amount }))
@@ -112,11 +114,17 @@ pub fn code(input: &str) -> IResult<&str, &str> {
 
 pub fn transaction(input: &str) -> IResult<&str, Transaction> {
     let (input, date) = date(input)?;
-    let (input, auxillary_date) = alt(char(' '), opt(auxillary_date))(input)?;
+    let (input, auxillary_date) = opt(auxillary_date)(input)?;
+    let (input, _) = char(' ')(input)?;
     let (input, state) = transaction_state(input)?;
+    let (input, _) = opt(char(' '))(input)?;
     let (input, code) = opt(code)(input)?;
+    let (input, _) = opt(char(' '))(input)?;
     let (input, (merchant, memo)) = description(input)?;
-    let (input, postings) = separated_list0(line_ending, posting)(input)?;
+    let (input, postings) = preceded(
+        newline,
+        separated_list0(line_ending, preceded(tab, posting)),
+    )(input)?;
     Ok((
         input,
         Transaction {
@@ -215,6 +223,20 @@ mod test {
             (Some("foo"), "bar"),
             test_and_extract("foo | bar", description)
         );
+    }
+
+    #[test]
+    fn parse_posting() {
+        let p = Posting {
+            account: Account {
+                name: "Expenses:Food",
+            },
+            amount: Some(Amount {
+                currency: "USD",
+                amount: Decimal::new(2000, 2),
+            }),
+        };
+        assert_eq!(p, test_and_extract("Expenses:Food  USD20.00", posting));
     }
 
     #[test]

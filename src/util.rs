@@ -1,23 +1,11 @@
 use nom::{
     branch::alt,
-    character::complete::{char, multispace0, one_of, space1},
+    character::complete::{char, one_of, space1},
     combinator::{opt, recognize},
-    error::ParseError,
     multi::{many0, many1},
-    sequence::{delimited, preceded, terminated, tuple},
+    sequence::{preceded, terminated, tuple},
     IResult,
 };
-
-/// A combinator that takes a parser `inner` and produces a parser that also consumes both leading and
-/// trailing whitespace, returning the output of `inner`.
-pub fn ws<'a, F: 'a, O, E: ParseError<&'a str>>(
-    inner: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
-where
-    F: Fn(&'a str) -> IResult<&'a str, O, E>,
-{
-    delimited(multispace0, inner, multispace0)
-}
 
 pub fn float(input: &str) -> IResult<&str, &str> {
     alt((
@@ -43,7 +31,38 @@ fn decimal(input: &str) -> IResult<&str, &str> {
 }
 
 pub fn space2(input: &str) -> IResult<&str, ()> {
-    char(' ')(input)?;
-    space1(input)?;
+    let (input, _) = char(' ')(input)?;
+    let (input, _) = space1(input)?;
     Ok((input, ()))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn test_and_extract<'a, T, F: Fn(&'a str) -> IResult<&'a str, T>>(input: &'a str, f: F) -> T {
+        let (_, out) = f(input).unwrap();
+        out
+    }
+
+    #[test]
+    fn parse_float() {
+        assert_eq!(".42", test_and_extract(".42", float));
+        assert_eq!("42E42", test_and_extract("42E42", float));
+        assert_eq!("42.42E42", test_and_extract("42.42E42", float));
+        assert_eq!("42.", test_and_extract("42.", float));
+        assert_eq!("42.42", test_and_extract("42.42", float));
+    }
+
+    #[test]
+    fn parse_decimal() {
+        assert_eq!("123", test_and_extract("123", decimal));
+        assert_eq!("123_456", test_and_extract("123_456", decimal));
+    }
+
+    #[test]
+    fn parse_space2() {
+        assert_eq!((), test_and_extract("  ", space2));
+        assert_eq!((), test_and_extract("         ", space2));
+    }
 }
