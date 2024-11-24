@@ -1,7 +1,7 @@
 use chrono::NaiveDate;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until},
+    bytes::complete::{tag, take_till, take_until},
     character::complete::{
         alpha1, char, digit1, line_ending, newline, not_line_ending, space0, tab,
     },
@@ -63,9 +63,10 @@ pub struct Posting<'a> {
 }
 
 fn posting(input: &str) -> IResult<&str, Posting> {
-    let (input, account) = map(take_until("  "), |name| Account { name })(input)?;
-    let (input, _) = space2(input)?;
-    let (input, amount) = opt(amount)(input)?;
+    let (input, account) = map(alt((take_until("  "), take_till(|c| c == '\n'))), |name| {
+        Account { name }
+    })(input)?;
+    let (input, amount) = opt(preceded(space2, amount))(input)?;
     Ok((input, Posting { account, amount }))
 }
 
@@ -241,7 +242,7 @@ mod test {
 
     #[test]
     fn parse_transaction() {
-        let t = "2024-3-2=2024/03/03 * (#100) Merchant | Memo\n\tExpenses:Food  USD20.00";
+        let t = "2024-3-2=2024/03/03 * (#100) Merchant | Memo\n\tExpenses:Food  USD20.00\n\tLiabilities:Credit";
         let parsed = test_and_extract(t, transaction);
         assert_eq!(parsed.date, NaiveDate::from_ymd_opt(2024, 3, 2).unwrap());
         assert_eq!(
@@ -254,15 +255,23 @@ mod test {
         assert_eq!(parsed.memo, "Memo");
         assert_eq!(
             parsed.postings,
-            vec![Posting {
-                account: Account {
-                    name: "Expenses:Food"
+            vec![
+                Posting {
+                    account: Account {
+                        name: "Expenses:Food"
+                    },
+                    amount: Some(Amount {
+                        currency: "USD",
+                        amount: Decimal::new(2000, 2)
+                    })
                 },
-                amount: Some(Amount {
-                    currency: "USD",
-                    amount: Decimal::new(2000, 2)
-                })
-            }]
+                Posting {
+                    account: Account {
+                        name: "Liabilities:Credit"
+                    },
+                    amount: None
+                }
+            ]
         );
     }
 }
